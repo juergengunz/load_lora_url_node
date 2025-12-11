@@ -9,6 +9,8 @@ from tqdm import tqdm
 class LoadLoraFromURL:
     """Load a LoRA model from a URL"""
     
+    MAX_CACHE_SIZE = 20
+    
     def __init__(self):
         self.cache_dir = os.path.join(folder_paths.get_input_directory(), "url_loras")
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -27,6 +29,26 @@ class LoadLoraFromURL:
     FUNCTION = "load_lora"
     CATEGORY = "loaders"
 
+    def _enforce_cache_limit(self):
+        """Remove oldest cached files if cache exceeds MAX_CACHE_SIZE"""
+        cached_files = [
+            os.path.join(self.cache_dir, f) 
+            for f in os.listdir(self.cache_dir) 
+            if f.endswith(".safetensors")
+        ]
+        
+        if len(cached_files) <= self.MAX_CACHE_SIZE:
+            return
+        
+        # Sort by modification time (oldest first)
+        cached_files.sort(key=lambda f: os.path.getmtime(f))
+        
+        # Remove oldest files until we're at the limit
+        files_to_remove = len(cached_files) - self.MAX_CACHE_SIZE
+        for f in cached_files[:files_to_remove]:
+            print(f"Removing oldest cached LoRA: {os.path.basename(f)}")
+            os.remove(f)
+
     def download_if_needed(self, url):
         """Download the file if not in cache"""
         filename = hashlib.md5(url.encode()).hexdigest() + ".safetensors"
@@ -34,6 +56,9 @@ class LoadLoraFromURL:
         
         if os.path.exists(local_path):
             return local_path
+        
+        # Enforce cache limit before downloading new file
+        self._enforce_cache_limit()
             
         print(f"Downloading LoRA from {url}")
         response = requests.get(url, stream=True)
